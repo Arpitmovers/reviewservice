@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/Arpitmovers/reviewservice/internal/rabbitmq/mq"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -42,11 +40,11 @@ func main() {
 	}
 
 	// Establish a connection using NewConnection from the mq package
-	conn, err := mq.NewConnection(amqpURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to AMQP: %v", err)
-	}
-	defer conn.Close()
+	// conn, err := mq.NewConnection(amqpURL)
+	// if err != nil {
+	// 	log.Fatalf("Failed to connect to AMQP: %v", err)
+	// }
+	// defer conn.Close()
 
 	log.Println("Successfully connected to AMQP")
 	r := setupRouter()
