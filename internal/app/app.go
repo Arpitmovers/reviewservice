@@ -14,6 +14,7 @@ import (
 	"github.com/Arpitmovers/reviewservice/internal/repository/redis"
 	services "github.com/Arpitmovers/reviewservice/internal/service"
 
+	"github.com/Arpitmovers/reviewservice/internal/auth"
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 )
@@ -37,7 +38,7 @@ func (a *App) Initialize(config *config.Config) {
 	a.redisClient = redis.GetRedisClient()
 	a.dbConnect = db.NewDBConnect(config)
 	a.Router = mux.NewRouter()
-	a.setRouters()
+	a.setRouters(config)
 
 	reviewRepo := models.NewReviewRepository(a.dbConnect)
 	reviewService := services.NewReviewService(reviewRepo)
@@ -67,10 +68,16 @@ func setupAmqp(cfg *config.Config) *mq.AmqpConnection {
 	return conn
 }
 
-func (a *App) setRouters() {
+func (a *App) setRouters(cfg *config.Config) {
 	reviewHandler := &handlers.ReviewHandler{S3: a.s3Client, Amqp: a.amqpConnect, Redis: a.redisClient,
 		Publisher: a.amqpPubliser, Consumer: a.amqpConsumer}
-	a.Router.HandleFunc("/reviews/injest", reviewHandler.TriggerReviewInjest).Methods(http.MethodPost)
+
+	a.Router.Handle(
+		"/reviews/injest",
+		auth.JWTAuthMiddleware(cfg, http.HandlerFunc(reviewHandler.TriggerReviewInjest)),
+	).Methods(http.MethodPost)
+
+	a.Router.HandleFunc("/login", auth.LoginHandler(cfg)).Methods("POST")
 	// return reviewHandler
 }
 

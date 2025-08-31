@@ -26,6 +26,9 @@ type Config struct {
 	DbPwd        string
 	DbUser       string
 	ReviewTable  string
+	JwtKey       string
+	ApiUser      string
+	ApiPwd       string
 }
 
 func Load() *Config {
@@ -51,6 +54,9 @@ func Load() *Config {
 		DbPwd:       getEnv("REVIEW_DBPWD", " "),
 		DbUser:      getEnv("REVIEW_USER", " "),
 		ReviewTable: getEnv("REVIEW_TABLE", " "),
+		JwtKey:      getEnv("JWT_KEY", " "),
+		ApiUser:     getEnv("API_USER", " "),
+		ApiPwd:      getEnv("API_PWD", " "),
 	}
 	return cfg
 
