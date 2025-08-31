@@ -57,23 +57,30 @@ func mapToProviderScore(msg *dto.Review) models.ProviderScore {
 		ReviewCount:  provider.ReviewCount,
 	}
 
-	// if len(provider.Grades) > 0 {
-	// 	if v, ok := provider.Grades["Cleanliness"]; ok {
-	// 		score.Cleanliness = v
-	// 	}
-	// 	if v, ok := provider.Grades["Facilities"]; ok {
-	// 		score.Facilities = v
-	// 	}
-	// 	if v, ok := provider.Grades["Location"]; ok {
-	// 		score.Location = v
-	// 	}
-	// 	if v, ok := provider.Grades["Service"]; ok {
-	// 		score.Service = v
-	// 	}
-	// 	if v, ok := provider.Grades["Value for money"]; ok {
-	// 		score.ValueForMoney = v
-	// 	}
-	// }
+	cleanliness, exists := provider.Grades["Cleanliness"]
+	if exists {
+		score.Cleanliness = cleanliness
+	}
+
+	faceilities, facExists := provider.Grades["Facilities"]
+	if facExists {
+		score.Facilities = faceilities
+	}
+
+	location, locExists := provider.Grades["Location"]
+	if locExists {
+		score.Location = location
+	}
+
+	service, servieExists := provider.Grades["Service"]
+	if servieExists {
+		score.Service = service
+	}
+
+	vam, valueMoneyExists := provider.Grades["Value for money"]
+	if valueMoneyExists {
+		score.ValueForMoney = vam
+	}
 
 	return score
 }

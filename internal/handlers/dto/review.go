@@ -56,9 +56,9 @@ type ReviewerInfo struct {
 }
 
 type OverallByProvider struct {
-	ProviderID   int     `json:"providerId"`
-	Provider     string  `json:"provider"`
-	OverallScore float64 `json:"overallScore"`
-	ReviewCount  int     `json:"reviewCount"`
-	//Grades       map[string]float64 `json:"grades"`
+	ProviderID   int                `json:"providerId"`
+	Provider     string             `json:"provider"`
+	OverallScore float64            `json:"overallScore"`
+	ReviewCount  int                `json:"reviewCount"`
+	Grades       map[string]float64 `json:"grades"`
 }

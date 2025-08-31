@@ -15,7 +15,7 @@ type Reviewer struct {
 	IsShowGlobalIcon    bool
 	IsShowReviewedCount bool
 
-	Reviews []Review `gorm:"foreignKey:ReviewerID"`
+	// Reviews []Review `gorm:"foreignKey:ReviewerID"`
 }
 
 func (Reviewer) TableName() string {

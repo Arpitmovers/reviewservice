@@ -3,7 +3,8 @@ package models
 import "time"
 
 type Review struct {
-	ReviewID         int64 `gorm:"primaryKey"`
+	ReviewID int64 `gorm:"primaryKey"`
+
 	HotelID          int64 `gorm:"index"`
 	ProviderID       int
 	Rating           float64
@@ -18,10 +19,11 @@ type Review struct {
 	ResponderName    string `gorm:"size:100"`
 	TranslateSource  string `gorm:"size:10"`
 	TranslateTarget  string `gorm:"size:10"`
-	ReviewerID       int64
 
-	Hotel    Hotel    `gorm:"foreignKey:HotelID"`
-	Reviewer Reviewer `gorm:"foreignKey:ReviewerID"`
+	ReviewerID int64
+
+	Hotel Hotel `gorm:"foreignKey:HotelID"`
+	//Reviewer Reviewer `gorm:"foreignKey:ReviewerID"`
 }
 
 func (Review) TableName() string {

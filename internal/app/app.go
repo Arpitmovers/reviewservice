@@ -9,8 +9,11 @@ import (
 	"github.com/Arpitmovers/reviewservice/internal/handlers"
 	s3 "github.com/Arpitmovers/reviewservice/internal/repository/aws"
 	"github.com/Arpitmovers/reviewservice/internal/repository/db"
+	"github.com/Arpitmovers/reviewservice/internal/repository/models"
 	"github.com/Arpitmovers/reviewservice/internal/repository/mq"
 	"github.com/Arpitmovers/reviewservice/internal/repository/redis"
+	services "github.com/Arpitmovers/reviewservice/internal/service"
+
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
 )
@@ -34,9 +37,13 @@ func (a *App) Initialize(config *config.Config) {
 	a.redisClient = redis.GetRedisClient()
 	a.dbConnect = db.NewDBConnect(config)
 	a.Router = mux.NewRouter()
-	reviewHandler := a.setRouters()
+	a.setRouters()
 
-	err := a.amqpConsumer.Consume(reviewHandler.ConsumeReview())
+	reviewRepo := models.NewReviewRepository(a.dbConnect)
+	reviewService := services.NewReviewService(reviewRepo)
+	reviewConsumer := handlers.NewReviewConsumer(reviewService)
+
+	err := a.amqpConsumer.Consume(reviewConsumer.ConsumeReview())
 
 	if err != nil {
 		log.Fatalf("failed to start consumer: %v", err)
@@ -60,11 +67,11 @@ func setupAmqp(cfg *config.Config) *mq.AmqpConnection {
 	return conn
 }
 
-func (a *App) setRouters() *handlers.ReviewHandler {
+func (a *App) setRouters() {
 	reviewHandler := &handlers.ReviewHandler{S3: a.s3Client, Amqp: a.amqpConnect, Redis: a.redisClient,
-		Publisher: a.amqpPubliser, Consumer: a.amqpConsumer, DB: a.dbConnect}
+		Publisher: a.amqpPubliser, Consumer: a.amqpConsumer}
 	a.Router.HandleFunc("/reviews/injest", reviewHandler.TriggerReviewInjest).Methods(http.MethodPost)
-	return reviewHandler
+	// return reviewHandler
 }
 
 func (a *App) Run(host string) {

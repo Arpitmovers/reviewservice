@@ -8,7 +8,15 @@ import (
 	services "github.com/Arpitmovers/reviewservice/internal/service"
 )
 
-func (h *ReviewHandler) ConsumeReview() func([]byte) error {
+type ReviewConsumer struct {
+	service *services.ReviewService
+}
+
+func NewReviewConsumer(service *services.ReviewService) *ReviewConsumer {
+	return &ReviewConsumer{service: service}
+}
+
+func (h *ReviewConsumer) ConsumeReview() func([]byte) error {
 
 	return func(body []byte) error {
 		fmt.Printf("Received review message: %s\n", string(body))
@@ -19,7 +27,7 @@ func (h *ReviewHandler) ConsumeReview() func([]byte) error {
 		}
 		// TODO: decode, validate, save to DB etc.
 
-		services.SaveReview(review)
+		return h.service.SaveReview(review)
 		// if err := h.DB.Transaction(func(tx *gorm.DB) error {
 		// 	// Save Review
 		// 	if err := tx.Create(&review).Error; err != nil {
