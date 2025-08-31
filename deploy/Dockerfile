@@ -13,8 +13,7 @@ RUN go build -o reviewservice ./cmd/reviewService
 # -------- Runtime Stage --------
 FROM alpine:3.19
 WORKDIR /app
-COPY --from=builder /app/reviewService .
-COPY .env .env
+COPY --from=builder /app/reviewservice .
 
 EXPOSE 8080
 CMD ["./reviewservice"]
