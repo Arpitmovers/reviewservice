@@ -9,11 +9,12 @@ import (
 	"sync"
 
 	handlers "github.com/Arpitmovers/reviewservice/internal/handlers/dto"
+	logger "github.com/Arpitmovers/reviewservice/internal/logging"
 	s3 "github.com/Arpitmovers/reviewservice/internal/repository/aws"
 	"github.com/Arpitmovers/reviewservice/internal/repository/mq"
 	"github.com/Arpitmovers/reviewservice/internal/repository/redis"
 	"github.com/go-playground/validator"
-	// "gorm.io/gorm"
+	"go.uber.org/zap"
 )
 
 var validate = validator.New()
@@ -38,12 +39,16 @@ type ReviewHandler struct {
 	// DB        *gorm.DB
 }
 
+// ---- publisher/subscriber ----
+
 func GetPublisher(amqpConn *mq.AmqpConnection) *mq.Publisher {
 	publisherOnce.Do(func() {
 		var err error
 		publisherInstance, err = mq.NewPublisher(amqpConn, "reviews", "direct")
 		if err != nil {
-			fmt.Printf("failed to init publisher: %v\n", err)
+			logger.Logger.Error("failed to init publisher", zap.Error(err))
+		} else {
+			logger.Logger.Info("publisher initialized", zap.String("exchange", "reviews"))
 		}
 	})
 	return publisherInstance
@@ -54,25 +59,28 @@ func GetSubscriber(amqpConn *mq.AmqpConnection) *mq.Consumer {
 		var err error
 		subscriberInstance, err = mq.NewConsumer(amqpConn, "reviewQueue", "reviews", "review.created")
 		if err != nil {
-			fmt.Printf("failed to init subscriber: %v\n", err)
+			logger.Logger.Error("failed to init subscriber", zap.Error(err))
+		} else {
+			logger.Logger.Info("subscriber initialized")
 		}
 	})
-
 	return subscriberInstance
 }
 
-func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Request) {
+// ---- handler ----
 
+func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Request) {
 	var requestBody handlers.ProcessReviewRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		logger.Logger.Error("invalid request payload", zap.Error(err))
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
 	if err := validateRequest(requestBody); err != nil {
+		logger.Logger.Warn("request validation failed", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
-
 		json.NewEncoder(w).Encode(handlers.APIResponse{
 			ErrorMsg: err.Error(),
 			Success:  false,
@@ -80,28 +88,22 @@ func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	fmt.Println("requestBody", requestBody)
+	logger.Logger.Info("received review ingest request", zap.Any("requestBody", requestBody))
 
 	files, err := h.S3.ListFiles("reviews")
 	if err != nil {
+		logger.Logger.Error("failed to list files in S3", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
-
 		json.NewEncoder(w).Encode(handlers.APIResponse{
 			ErrorMsg: "Failed to list files in S3 bucket",
 			Success:  false,
 		})
-		fmt.Printf("Error listing files: %v", err)
 		return
 	}
 
-	json.NewEncoder(w).Encode(handlers.APIResponse{
-		ErrorMsg: "",
-		Success:  true,
-	})
-
 	totalFiles := len(files)
-
 	if totalFiles == 0 {
+		logger.Logger.Warn("no files found in S3 bucket", zap.String("prefix", "reviews"))
 		json.NewEncoder(w).Encode(handlers.APIResponse{
 			ErrorMsg: "no files found",
 			Success:  false,
@@ -109,21 +111,27 @@ func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	fmt.Println("totalFiles count ", totalFiles)
-	numCPU := runtime.NumCPU()
+	logger.Logger.Info("files found for processing", zap.Int("count", totalFiles))
 
-	h.processFiles(files, numCPU)
+	h.processFiles(files)
 
+	json.NewEncoder(w).Encode(handlers.APIResponse{
+		ErrorMsg: "",
+		Success:  true,
+	})
 }
 
-func (h *ReviewHandler) processFiles(files []string, workerCount int) {
+func (h *ReviewHandler) processFiles(files []string) {
 	if len(files) == 0 {
 		return
 	}
+	workerCount := runtime.NumCPU()
+
 	if workerCount > len(files) {
 		workerCount = len(files)
 	}
 
+	logger.Logger.Info("workerCount is ", zap.Int("workerCount", workerCount))
 	jobs := make(chan string, len(files))
 	var wg sync.WaitGroup
 
@@ -132,7 +140,7 @@ func (h *ReviewHandler) processFiles(files []string, workerCount int) {
 		go func(workerID int) {
 			defer wg.Done()
 			for fileName := range jobs {
-				fmt.Printf("Worker %d picked file: %s\n", workerID, fileName)
+				logger.Logger.Debug("worker picked file", zap.Int("workerID", workerID), zap.String("file", fileName))
 				h.processFile(fileName)
 			}
 		}(i + 1)
@@ -147,55 +155,49 @@ func (h *ReviewHandler) processFiles(files []string, workerCount int) {
 }
 
 func (h *ReviewHandler) processFile(fileName string) {
-	fmt.Printf("Processing file: %s", fileName)
+	logger.Logger.Info("processing file", zap.String("file", fileName))
 
 	stream, err := h.S3.GetFileStream(fileName)
 	if err != nil {
-		fmt.Printf("Failed to get stream for %s: %v", fileName, err)
+		logger.Logger.Error("failed to get file stream", zap.String("file", fileName), zap.Error(err))
 		return
 	}
 	defer stream.Close()
 
 	scanner := bufio.NewScanner(stream)
 	for scanner.Scan() {
-
 		line := scanner.Bytes()
 		var review handlers.Review
 
 		if err := json.Unmarshal(line, &review); err != nil {
-			fmt.Printf("Invalid JSON in %s: %v", fileName, err)
+			logger.Logger.Warn("invalid JSON line, ignoring line", zap.ByteString("line", line), zap.Error(err))
 			continue
 		}
 
 		if _, ok := h.validateReview(review); ok {
-			// 2. Create Publisher (say exchange = "reviews", type = "direct")
 
-			err = h.Publisher.Publish("review.created", line)
-			if err != nil {
-				fmt.Printf("failed to publish message: %v", err)
+			if err := h.Publisher.PublishSafe("review.created", line); err != nil {
+				logger.Logger.Error("failed to publish message", zap.Error(err), zap.String("file", fileName))
 			} else {
-				fmt.Println("message published successfully")
+				logger.Logger.Debug("message published successfully", zap.String("file", fileName))
 			}
-
 		}
 	}
 
-	fmt.Print("all data published for", fileName)
-
 	if err := scanner.Err(); err != nil {
-		fmt.Printf("Error reading file %s: %v", fileName, err)
+		logger.Logger.Error("error reading file", zap.String("file", fileName), zap.Error(err))
+	} else {
+		logger.Logger.Info("all data published", zap.String("file", fileName))
 	}
-
 }
 
 func (h *ReviewHandler) validateReview(review handlers.Review) (error, bool) {
 	if review.HotelID == 0 {
-		fmt.Println(" missing HotelID in ", review)
-
+		logger.Logger.Warn("missing HotelID", zap.Any("review", review))
 		return fmt.Errorf("hotelId is required"), false
 	}
 	if review.Comment.HotelReviewID == 0 {
-		fmt.Println(" missing HotelReviewID in ", review)
+		logger.Logger.Warn("missing HotelReviewID", zap.Any("review", review))
 		return fmt.Errorf("missing HotelReviewID"), false
 	}
 
@@ -213,14 +215,6 @@ fileName:{ status:" ", count :int})
 
 */
 
-// 1 . get total   file count from s3
-// spin  no of go routinesbased on no of cpus(B)
-// B  go routines will parse fileand do file validation and publis
-// noof iternations  needed = totalFileCnt/  cpus
-
-// in each go rountine start reading file and validation  once validation passed add it  to queue
-//, andpublishing to amqp,once  B os
-
 //idempotency key: {fileName:"done/failed/inprogress"}  // ttl  of 30 days --> 1st check
 // to resume in  case server crash: fileName + "count" : sucess / failed  , on next api call itshould resume fromsame  position
 /*
@@ -228,10 +222,3 @@ fileName:{ status:" ", count :int})
 	s3 read failed --> update   {fileName:failed}
 	inital connect  failed --> dea
 */
-
-// api payload  validation
-
-// totalIterations = totalFileCnt /  parallelismFactor
-// each go routine,
-// read file , parse record
-// publish event , after getting ack, update status as processed

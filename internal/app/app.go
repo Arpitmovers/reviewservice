@@ -15,7 +15,9 @@ import (
 	services "github.com/Arpitmovers/reviewservice/internal/service"
 
 	"github.com/Arpitmovers/reviewservice/internal/auth"
+	logger "github.com/Arpitmovers/reviewservice/internal/logging"
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -27,50 +29,58 @@ type App struct {
 	dbConnect    *gorm.DB
 	amqpPubliser *mq.Publisher
 	amqpConsumer *mq.Consumer
+	// logger       *zap.Logger
 }
 
-func (a *App) Initialize(config *config.Config) {
-	a.s3Client = s3.GetS3Client(config)
-	a.amqpConnect = setupAmqp(config)
+func (a *App) Initialize(cfg *config.Config) {
+
+	logger.InitLogger()
+	defer logger.Logger.Sync()
+
+	a.s3Client = s3.GetS3Client(cfg)
+	a.amqpConnect = a.setupAmqp(cfg)
 	a.amqpPubliser = handlers.GetPublisher(a.amqpConnect)
 	a.amqpConsumer = handlers.GetSubscriber(a.amqpConnect)
 
 	a.redisClient = redis.GetRedisClient()
-	a.dbConnect = db.NewDBConnect(config)
+	a.dbConnect = db.NewDBConnect(cfg)
 	a.Router = mux.NewRouter()
-	a.setRouters(config)
+	a.setRouters(cfg)
 
+	// setup services
 	reviewRepo := models.NewReviewRepository(a.dbConnect)
 	reviewService := services.NewReviewService(reviewRepo)
 	reviewConsumer := handlers.NewReviewConsumer(reviewService)
 
-	err := a.amqpConsumer.Consume(reviewConsumer.ConsumeReview())
-
-	if err != nil {
-		log.Fatalf("failed to start consumer: %v", err)
+	rmqError := a.amqpConsumer.Consume(reviewConsumer.ConsumeReview())
+	if rmqError != nil {
+		logger.Logger.Error("failed to start consumer", zap.Error(rmqError))
 	}
-	//  Block main goroutine so your app keeps running
-	//select {}
-	//	defer a.amqpConnect.Close()
 }
 
-func setupAmqp(cfg *config.Config) *mq.AmqpConnection {
+func (a *App) setupAmqp(cfg *config.Config) *mq.AmqpConnection {
 	amqpURL := fmt.Sprintf(
 		"amqp://%s:%s@localhost:%s/%s",
 		cfg.AmqpUserName, cfg.AmqpPwd, cfg.AmqpPort, cfg.AmqpVhost)
 
 	conn, err := mq.NewConnection(amqpURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to AMQP: %v", err)
-
+		logger.Logger.Error("failed to connect to AMQP", zap.Error(err))
+		return nil
 	}
-	log.Println("Successfully connected to AMQP")
+
+	logger.Logger.Info("Successfully connected to AMQP", zap.String("url", amqpURL))
 	return conn
 }
 
 func (a *App) setRouters(cfg *config.Config) {
-	reviewHandler := &handlers.ReviewHandler{S3: a.s3Client, Amqp: a.amqpConnect, Redis: a.redisClient,
-		Publisher: a.amqpPubliser, Consumer: a.amqpConsumer}
+	reviewHandler := &handlers.ReviewHandler{
+		S3:        a.s3Client,
+		Amqp:      a.amqpConnect,
+		Redis:     a.redisClient,
+		Publisher: a.amqpPubliser,
+		Consumer:  a.amqpConsumer,
+	}
 
 	a.Router.Handle(
 		"/reviews/injest",
@@ -78,9 +88,9 @@ func (a *App) setRouters(cfg *config.Config) {
 	).Methods(http.MethodPost)
 
 	a.Router.HandleFunc("/login", auth.LoginHandler(cfg)).Methods("POST")
-	// return reviewHandler
 }
 
 func (a *App) Run(host string) {
+	logger.Logger.Info("starting server", zap.String("host", host))
 	log.Fatal(http.ListenAndServe(host, a.Router))
 }

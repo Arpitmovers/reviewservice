@@ -7,10 +7,12 @@ import (
 	"sync"
 
 	"github.com/Arpitmovers/reviewservice/internal/config"
+	logger "github.com/Arpitmovers/reviewservice/internal/logging"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	s3Config "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"go.uber.org/zap"
 )
 
 var (
@@ -30,29 +32,34 @@ type Storage interface {
 
 func GetS3Client(cfg *config.Config) *S3Storage {
 	once.Do(func() {
-
 		s3Cfg, err := s3Config.LoadDefaultConfig(
 			context.TODO(),
-			s3Config.WithRegion("ap-south-1"),
+			s3Config.WithRegion(cfg.AwsRegion),
 			s3Config.WithCredentialsProvider(
 				credentials.NewStaticCredentialsProvider(cfg.AwsAccessKey, cfg.AwsSecretKey, ""),
 			),
 		)
 		if err != nil {
-			panic(fmt.Sprintf("unable to load AWS SDK config, %v", err))
+			logger.Logger.Fatal("unable to load AWS SDK config",
+				zap.Error(err),
+				zap.String("region", cfg.AwsRegion),
+			)
 		}
 
 		s3Client = s3.NewFromConfig(s3Cfg)
-		fmt.Println("S3 client initialized")
+		logger.Logger.Info("S3 client initialized",
+			zap.String("region", cfg.AwsRegion),
+			zap.String("bucket", "hotelservice"),
+		)
 	})
+
 	return &S3Storage{
 		client:           s3Client,
-		reviewFileBucket: "hotelservice", // Assuming you have a bucket name in your config
+		reviewFileBucket: "hotelservice",
 	}
 }
 
 func (s *S3Storage) ListFiles(path string) ([]string, error) {
-
 	var fileNames []string
 	input := &s3.ListObjectsV2Input{
 		Bucket: aws.String("hotelservice"),
@@ -64,29 +71,48 @@ func (s *S3Storage) ListFiles(path string) ([]string, error) {
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(context.Background())
 		if err != nil {
+			logger.Logger.Error("failed to list files from S3",
+				zap.String("bucket", s.reviewFileBucket),
+				zap.String("prefix", path),
+				zap.Error(err),
+			)
 			return nil, fmt.Errorf("failed to list files: %w", err)
 		}
 
 		for _, obj := range page.Contents {
-			//Skip "folders" (keys ending with "/")
-			if *obj.Size != int64(0) {
+			if *obj.Size != int64(0) { // skip empty "folders"
 				fileNames = append(fileNames, *obj.Key)
 			}
 		}
 	}
 
+	logger.Logger.Info("S3 files listed successfully",
+		zap.String("bucket", s.reviewFileBucket),
+		zap.String("prefix", path),
+		zap.Int("file_count", len(fileNames)),
+	)
+
 	return fileNames, nil
 }
 
-// GetFileStream returns an io.ReadCloser to stream the file content
 func (s *S3Storage) GetFileStream(fileName string) (io.ReadCloser, error) {
 	output, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
 		Bucket: aws.String(s.reviewFileBucket),
 		Key:    aws.String(fileName),
 	})
 	if err != nil {
+		logger.Logger.Error("failed to get S3 object",
+			zap.String("bucket", s.reviewFileBucket),
+			zap.String("file", fileName),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("failed to get file %s: %w", fileName, err)
 	}
-	// Caller is responsible for closing the stream
+
+	logger.Logger.Info("S3 file stream opened",
+		zap.String("bucket", s.reviewFileBucket),
+		zap.String("file", fileName),
+	)
+
 	return output.Body, nil
 }

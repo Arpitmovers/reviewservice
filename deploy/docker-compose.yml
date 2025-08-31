@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   app:
-    image: ghcr.io/<your-username>/<your-repo>/reviewservice:latest
+    image: ghcr.io/Arpitmovers/reviewService/reviewservice:latest
     container_name: reviewservice
     build:
       context: .

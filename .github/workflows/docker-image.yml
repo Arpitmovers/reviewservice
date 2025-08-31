@@ -15,5 +15,5 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build Docker image
-      run: docker build -f deploy/Dockerfile -t ghcr.io/${{ github.repository }}/reviewservice:latest .
+      run: docker build -f deploy/Dockerfile -t ghcr.io/arpitmovers/reviewservice/reviewservice:latest .
 

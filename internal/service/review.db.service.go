@@ -1,10 +1,10 @@
 package services
 
 import (
-	"fmt"
-
 	dto "github.com/Arpitmovers/reviewservice/internal/handlers/dto"
+	logger "github.com/Arpitmovers/reviewservice/internal/logging"
 	"github.com/Arpitmovers/reviewservice/internal/repository/models"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -25,20 +25,21 @@ func (reviewRepo *ReviewService) SaveReview(msg *dto.Review) error {
 
 	return reviewRepo.Repo.Db.Transaction(func(tx *gorm.DB) error {
 		if err := models.UpsertHotel(tx, hotel); err != nil {
-			fmt.Println("error in  UpsertHotel ", err)
+			logger.Logger.Error("error in  UpsertHotel ", zap.Error(err))
 			return err
 		}
 		if err := models.UpsertReviewer(tx, reviewer); err != nil {
-			fmt.Println("error in  UpsertReviewer ", err)
+
+			logger.Logger.Error("error in  UpsertReviewer ", zap.Error(err))
 			return err
 		}
 
 		if err := models.UpsertProviderScore(tx, providerScore); err != nil {
-			fmt.Println("error in  UpsertProviderScore ", err)
+			logger.Logger.Error("error in  UpsertProviderScore ", zap.Error(err))
 			return err
 		}
 		if err := models.UpsertReview(tx, review); err != nil {
-			fmt.Println("error in  UpsertReview ", err)
+			logger.Logger.Error("error in  UpsertReview ", zap.Error(err))
 			return err
 		}
 		return nil
