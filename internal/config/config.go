@@ -29,6 +29,7 @@ type Config struct {
 	JwtKey       string
 	ApiUser      string
 	ApiPwd       string
+	ReviewBucket string
 }
 
 func Load() *Config {
@@ -48,15 +49,16 @@ func Load() *Config {
 		AwsAccessKey: getEnv("AWS_ACCESS_KEY_ID", "6379"),
 		AwsSecretKey: getEnv("AWS_SECRET_ACCESS_KEY", "6379"),
 
-		DbHost:      getEnv("MARIA_HOST", "localhost"),
-		DbPort:      getEnv("MARIA_PORT", "3306"),
-		DbName:      getEnv("REVIEW_DB", "zuzu_db"),
-		DbPwd:       getEnv("REVIEW_DBPWD", " "),
-		DbUser:      getEnv("REVIEW_USER", " "),
-		ReviewTable: getEnv("REVIEW_TABLE", " "),
-		JwtKey:      getEnv("JWT_KEY", " "),
-		ApiUser:     getEnv("API_USER", " "),
-		ApiPwd:      getEnv("API_PWD", " "),
+		DbHost:       getEnv("MARIA_HOST", "localhost"),
+		DbPort:       getEnv("MARIA_PORT", "3306"),
+		DbName:       getEnv("REVIEW_DB", "zuzu_db"),
+		DbPwd:        getEnv("REVIEW_DBPWD", " "),
+		DbUser:       getEnv("REVIEW_USER", " "),
+		ReviewTable:  getEnv("REVIEW_TABLE", " "),
+		JwtKey:       getEnv("JWT_KEY", " "),
+		ApiUser:      getEnv("API_USER", " "),
+		ApiPwd:       getEnv("API_PWD", " "),
+		ReviewBucket: getEnv("REVIEW_BUCKET", ""),
 	}
 	return cfg
 

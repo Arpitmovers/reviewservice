@@ -2,10 +2,11 @@ package auth
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/Arpitmovers/reviewservice/internal/config"
+	logger "github.com/Arpitmovers/reviewservice/internal/logging"
+	"go.uber.org/zap"
 )
 
 type Creds struct {
@@ -13,28 +14,37 @@ type Creds struct {
 	Password string `json:"password"`
 }
 
+func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		logger.Logger.Error("failed to write JSON response", zap.Error(err))
+	}
+}
+
 func LoginHandler(cfg *config.Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var creds Creds
 
 		if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
-			http.Error(w, "Invalid request", http.StatusBadRequest)
+			logger.Logger.Error("invalid login request", zap.Error(err))
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request"})
 			return
 		}
 
 		if creds.Username != cfg.ApiUser || creds.Password != cfg.ApiPwd {
-
-			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+			logger.Logger.Warn("invalid credentials attempt", zap.String("username", creds.Username))
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Invalid credentials"})
 			return
 		}
 
 		token, err := GenerateJWT(creds.Username, cfg)
 		if err != nil {
-			fmt.Println("failed to generate token", err)
-			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			logger.Logger.Error("failed to generate JWT", zap.String("username", creds.Username), zap.Error(err))
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Failed to generate token"})
 			return
 		}
 
-		json.NewEncoder(w).Encode(map[string]string{"token": token})
+		writeJSON(w, http.StatusOK, map[string]string{"token": token})
 	}
 }

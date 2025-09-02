@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/Arpitmovers/reviewservice/internal/config"
@@ -29,7 +28,6 @@ type App struct {
 	dbConnect    *gorm.DB
 	amqpPubliser *mq.Publisher
 	amqpConsumer *mq.Consumer
-	// logger       *zap.Logger
 }
 
 func (a *App) Initialize(cfg *config.Config) {
@@ -37,13 +35,24 @@ func (a *App) Initialize(cfg *config.Config) {
 	logger.InitLogger()
 	defer logger.Logger.Sync()
 
-	a.s3Client = s3.GetS3Client(cfg)
+	client, err := s3.GetS3Client(cfg)
+	if err != nil {
+		logger.Logger.Error("unable to get S3 client", zap.Error(err))
+	}
+	a.s3Client = client
+
 	a.amqpConnect = a.setupAmqp(cfg)
 	a.amqpPubliser = handlers.GetPublisher(a.amqpConnect)
 	a.amqpConsumer = handlers.GetSubscriber(a.amqpConnect)
 
 	a.redisClient = redis.GetRedisClient()
-	a.dbConnect = db.NewDBConnect(cfg)
+
+	var dbErr error
+	a.dbConnect, dbErr = db.NewDBConnect(cfg)
+	if dbErr != nil {
+		logger.Logger.Error("error in NewDBConnect ", zap.Error(err))
+	}
+
 	a.Router = mux.NewRouter()
 	a.setRouters(cfg)
 
@@ -83,7 +92,7 @@ func (a *App) setRouters(cfg *config.Config) {
 	}
 
 	a.Router.Handle(
-		"/reviews/injest",
+		"/v1/reviews/injest",
 		auth.JWTAuthMiddleware(cfg, http.HandlerFunc(reviewHandler.TriggerReviewInjest)),
 	).Methods(http.MethodPost)
 
@@ -92,5 +101,5 @@ func (a *App) setRouters(cfg *config.Config) {
 
 func (a *App) Run(host string) {
 	logger.Logger.Info("starting server", zap.String("host", host))
-	log.Fatal(http.ListenAndServe(host, a.Router))
+	http.ListenAndServe(host, a.Router)
 }

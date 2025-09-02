@@ -16,8 +16,10 @@ import (
 )
 
 var (
-	s3Client *s3.Client
-	once     sync.Once
+	s3Client     *s3.Client
+	once         sync.Once
+	reviewBucket string
+	initErr      error
 )
 
 type S3Storage struct {
@@ -30,8 +32,10 @@ type Storage interface {
 	GetFileStream(fileName string) (io.ReadCloser, error)
 }
 
-func GetS3Client(cfg *config.Config) *S3Storage {
+func GetS3Client(cfg *config.Config) (*S3Storage, error) {
 	once.Do(func() {
+
+		reviewBucket = cfg.ReviewBucket
 		s3Cfg, err := s3Config.LoadDefaultConfig(
 			context.TODO(),
 			s3Config.WithRegion(cfg.AwsRegion),
@@ -40,29 +44,32 @@ func GetS3Client(cfg *config.Config) *S3Storage {
 			),
 		)
 		if err != nil {
-			logger.Logger.Fatal("unable to load AWS SDK config",
-				zap.Error(err),
-				zap.String("region", cfg.AwsRegion),
-			)
+			logger.Logger.Error("unable to load AWS SDK config", zap.Error(err), zap.String("region", cfg.AwsRegion))
+			initErr = err
+			return
 		}
 
 		s3Client = s3.NewFromConfig(s3Cfg)
 		logger.Logger.Info("S3 client initialized",
 			zap.String("region", cfg.AwsRegion),
-			zap.String("bucket", "hotelservice"),
+			zap.String("bucket", reviewBucket),
 		)
 	})
 
+	if initErr != nil {
+		return nil, initErr
+	}
+
 	return &S3Storage{
 		client:           s3Client,
-		reviewFileBucket: "hotelservice",
-	}
+		reviewFileBucket: reviewBucket,
+	}, nil
 }
 
 func (s *S3Storage) ListFiles(path string) ([]string, error) {
 	var fileNames []string
 	input := &s3.ListObjectsV2Input{
-		Bucket: aws.String("hotelservice"),
+		Bucket: aws.String(reviewBucket),
 		Prefix: aws.String(path),
 	}
 

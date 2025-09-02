@@ -39,8 +39,6 @@ type ReviewHandler struct {
 	// DB        *gorm.DB
 }
 
-// ---- publisher/subscriber ----
-
 func GetPublisher(amqpConn *mq.AmqpConnection) *mq.Publisher {
 	publisherOnce.Do(func() {
 		var err error
@@ -69,19 +67,29 @@ func GetSubscriber(amqpConn *mq.AmqpConnection) *mq.Consumer {
 
 // ---- handler ----
 
+func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		logger.Logger.Error("failed to write JSON response", zap.Error(err))
+	}
+}
+
 func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Request) {
 	var requestBody handlers.ProcessReviewRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		logger.Logger.Error("invalid request payload", zap.Error(err))
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		writeJSON(w, http.StatusBadRequest, handlers.APIResponse{
+			ErrorMsg: "Invalid request payload",
+			Success:  false,
+		})
 		return
 	}
 
 	if err := validateRequest(requestBody); err != nil {
 		logger.Logger.Warn("request validation failed", zap.Error(err))
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(handlers.APIResponse{
+		writeJSON(w, http.StatusBadRequest, handlers.APIResponse{
 			ErrorMsg: err.Error(),
 			Success:  false,
 		})
@@ -90,12 +98,11 @@ func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Reque
 
 	logger.Logger.Info("received review ingest request", zap.Any("requestBody", requestBody))
 
-	files, err := h.S3.ListFiles("reviews")
+	files, err := h.S3.ListFiles(requestBody.PathPrefix)
 	if err != nil {
 		logger.Logger.Error("failed to list files in S3", zap.Error(err))
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(handlers.APIResponse{
-			ErrorMsg: "Failed to list files in S3 bucket",
+		writeJSON(w, http.StatusInternalServerError, handlers.APIResponse{
+			ErrorMsg: "Failed to list files in S3 bucket at given path ",
 			Success:  false,
 		})
 		return
@@ -103,9 +110,9 @@ func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Reque
 
 	totalFiles := len(files)
 	if totalFiles == 0 {
-		logger.Logger.Warn("no files found in S3 bucket", zap.String("prefix", "reviews"))
-		json.NewEncoder(w).Encode(handlers.APIResponse{
-			ErrorMsg: "no files found",
+		logger.Logger.Warn("no files found in S3 bucket", zap.String("prefix", requestBody.PathPrefix))
+		writeJSON(w, http.StatusBadRequest, handlers.APIResponse{
+			ErrorMsg: "No files found in s3 path",
 			Success:  false,
 		})
 		return
@@ -113,12 +120,13 @@ func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Reque
 
 	logger.Logger.Info("files found for processing", zap.Int("count", totalFiles))
 
-	h.processFiles(files)
-
-	json.NewEncoder(w).Encode(handlers.APIResponse{
+	writeJSON(w, http.StatusOK, handlers.APIResponse{
 		ErrorMsg: "",
 		Success:  true,
 	})
+
+	// fire async processing
+	h.processFiles(files)
 }
 
 func (h *ReviewHandler) processFiles(files []string) {
@@ -131,7 +139,7 @@ func (h *ReviewHandler) processFiles(files []string) {
 		workerCount = len(files)
 	}
 
-	logger.Logger.Info("workerCount is ", zap.Int("workerCount", workerCount))
+	logger.Logger.Info("workerCount is", zap.Int("workerCount", workerCount))
 	jobs := make(chan string, len(files))
 	var wg sync.WaitGroup
 

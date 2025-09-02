@@ -1,12 +1,12 @@
 package mq
 
 import (
-	"fmt"
-	"log"
 	"sync"
 	"time"
 
+	logger "github.com/Arpitmovers/reviewservice/internal/logging"
 	"github.com/rabbitmq/amqp091-go"
+	"go.uber.org/zap"
 )
 
 type AmqpConnection struct {
@@ -31,19 +31,28 @@ func NewConnection(url string) (*AmqpConnection, error) {
 			if err == nil {
 				break
 			}
-			log.Printf("connection failed: %v. Retrying...", err)
+			logger.Logger.Error("failed to connect to RabbitMQ",
+				zap.Int("attempt", i+1),
+				zap.String("url", url),
+				zap.Error(err),
+			)
 			time.Sleep(time.Duration(i+1) * time.Second)
 		}
+
 		if err != nil {
-			err = fmt.Errorf("could not connect to RabbitMQ: %w", err)
+			logger.Logger.Error("could not establish RabbitMQ connection", zap.String("url", url), zap.Error(err))
 			return
 		}
 
 		ch, err = conn.Channel()
 		if err != nil {
-			err = fmt.Errorf("could not open channel: %w", err)
+			logger.Logger.Error("could not open RabbitMQ channel", zap.String("url", url), zap.Error(err))
 			return
 		}
+
+		logger.Logger.Info("successfully connected to RabbitMQ",
+			zap.String("url", url),
+		)
 
 		instance = &AmqpConnection{
 			conn:    conn,
@@ -61,9 +70,13 @@ func (c *AmqpConnection) Channel() *amqp091.Channel {
 
 func (c *AmqpConnection) Close() {
 	if c.channel != nil {
-		_ = c.channel.Close()
+		if err := c.channel.Close(); err != nil {
+			logger.Logger.Warn("failed to close RabbitMQ channel", zap.Error(err))
+		}
 	}
 	if c.conn != nil {
-		_ = c.conn.Close()
+		if err := c.conn.Close(); err != nil {
+			logger.Logger.Warn("failed to close RabbitMQ connection", zap.Error(err))
+		}
 	}
 }
