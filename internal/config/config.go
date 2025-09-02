@@ -44,8 +44,8 @@ func Load() *Config {
 		AmqpVhost:    getEnv("AMQP_VHOST", "info"),
 		AmqpUserName: getEnv("AMQP_USERNAME", "info"),
 		AmqpPwd:      getEnv("AMQP_PWD", "info"),
-		RedisPort:    getEnv("AMQP_PWD", "6379"),
-		RedisHost:    getEnv("REDIS_HOST", "6379"),
+		RedisPort:    getEnv("REDIS_PORT", "6379"),
+		RedisHost:    getEnv("REDIS_HOST", "127.0.0.1"),
 		AwsAccessKey: getEnv("AWS_ACCESS_KEY_ID", "6379"),
 		AwsSecretKey: getEnv("AWS_SECRET_ACCESS_KEY", "6379"),
 

@@ -45,7 +45,7 @@ func (a *App) Initialize(cfg *config.Config) {
 	a.amqpPubliser = handlers.GetPublisher(a.amqpConnect)
 	a.amqpConsumer = handlers.GetSubscriber(a.amqpConnect)
 	var redisError error
-	a.redisClient, redisError = redis.GetRedisClient()
+	a.redisClient, redisError = redis.GetRedisClient(cfg)
 
 	if redisError != nil {
 		logger.Logger.Error("error in GetRedisClient ", zap.Error(err))

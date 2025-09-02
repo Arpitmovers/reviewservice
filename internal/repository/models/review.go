@@ -2,27 +2,6 @@ package models
 
 import "time"
 
-// CREATE TABLE Reviews (
-// 	review_id BIGINT PRIMARY KEY,
-// 	hotel_id BIGINT unsigned NOT NULL,
-// 	provider_id INT NOT NULL,
-// 	reviewer_id BIGINT unsigned NOT NULL,
-// 	rating DECIMAL(3,1),
-// 	check_in_month_year VARCHAR(20),
-// 	review_date TIMESTAMP,
-// 	review_title VARCHAR(200),
-// 	review_text TEXT,
-// 	response_text TEXT,
-// 	room_type VARCHAR(100),
-// 	length_of_stay INT,
-// 	positives TEXT,
-// 	negatives TEXT,
-// 	encrypted_data TEXT,
-// 	FOREIGN KEY (hotel_id) REFERENCES Hotels(hotel_id),
-// 	 FOREIGN KEY (provider_id) REFERENCES Providers(provider_id),
-//  FOREIGN KEY (reviewer_id) REFERENCES Reviewers(reviewer_id)
-// );
-
 type Review struct {
 	ReviewID   uint64 `gorm:"primaryKey;column:review_id"`
 	HotelID    uint64 `gorm:"not null;index"`

@@ -13,8 +13,7 @@ type ReviewerInfoDTO struct {
 	ReviewGroupId         int    `json:"reviewGroupId"`
 	ReviewerReviewedCount int    `json:"reviewerReviewedCount"`
 	IsExpertReviewer      bool   `json:"isExpertReviewer"`
-	//IsShowGlobalIcon      bool   `json:"isShowGlobalIcon"`
-	IsShowReviewedCount bool `json:"isShowReviewedCount"`
+	IsShowReviewedCount   bool   `json:"isShowReviewedCount"`
 }
 
 type CommentDTO struct {

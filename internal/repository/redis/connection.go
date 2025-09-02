@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Arpitmovers/reviewservice/internal/config"
 	logger "github.com/Arpitmovers/reviewservice/internal/logging"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -20,11 +21,11 @@ type RedisCache struct {
 	client *redis.Client
 }
 
-func GetRedisClient() (*RedisCache, error) {
+func GetRedisClient(cfg *config.Config) (*RedisCache, error) {
 
 	once.Do(func() {
 		rdb := redis.NewClient(&redis.Options{
-			Addr:     "127.0.0.1:6379",
+			Addr:     cfg.RedisHost + ":" + cfg.RedisPort,
 			Password: "", // set if needed
 			DB:       0,
 		})
