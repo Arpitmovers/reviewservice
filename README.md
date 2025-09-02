@@ -18,7 +18,7 @@ Install the following for running the setup in your local system:
 -  Add virtual host to rabbitMQ: sudo rabbitmqctl add_vhost review_dev
 -  Create RabbitMq user: sudo rabbitmqctl add_user reviewService 1asd21
 -  Grant read and write permission to the user reviewService on the vhost review_dev  
-  sudo rabbitmqctl set_permissions -p review_dev reviewService "" ".*" ".*"*"
+  sudo rabbitmqctl set_permissions -p review_dev  reviewService  ".*" ".*" ".*"
 
 
 
@@ -33,7 +33,14 @@ Tech Stack: Golang1.22, RabbitMQ 4.1.3, Redis, MariaDB 15.1
 
 - Incase  , of  failure from Broker / Exchange in publishing msg , the sender will be retying using exponential backoff strategy at max 5 times.
 - In case no files are present in the s3 path , api will respond with message :"No files found in s3 path"
-- **
+  
+  API behaviour:
+- Idempotency: To achieve one time processing of a file ,i have used redis with SETNX  (set if not exists), which is an atomic operation.
+- Concurrent-safe : Multiple API requests or workers will skip files already being processed.
+- Each file will be processed only if it has failed previosuly or it has not been processed before.
+- 
+
+- Incase of 
 
 _________________
 
@@ -42,15 +49,21 @@ Flow:
 - Each go routine reads and parses the records in .jl file , and does validation of json object 
 - If the records is Valid it is published to "reviews"  AMQP exchange. The exchange declared is of direct type.
 - In case of errors in publishing to AMQP exchange , there is exponential backoff strategy implemented.
-- Once the msg is 
 - 
+
+
+- Consumer side:
+   In case DB operation fails (db timeout/ db crash)- the mesage will be retried from broker as we are using Nack(false, true)
+   In case of bad message , we are informing broker to discard the message = Nack(false, false)
+   In case of succesful  db insert , we are sending ACK to broker , the broker will discard the msg ,and will not resend the message
+   
 
 
 
 _________________________
 Assumptions:
 
-
+1. We have files in s3 of unique name 
 
 
 

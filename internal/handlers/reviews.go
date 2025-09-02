@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"runtime"
 	"sync"
+	"time"
 
 	handlers "github.com/Arpitmovers/reviewservice/internal/handlers/dto"
 	logger "github.com/Arpitmovers/reviewservice/internal/logging"
@@ -23,6 +24,10 @@ var validate = validator.New()
 func validateRequest(req handlers.ProcessReviewRequest) error {
 	return validate.Struct(req)
 }
+
+const (
+	reviewFileStateTTL = 15 * 24 * time.Hour
+)
 
 var (
 	publisherInstance  *mq.Publisher
@@ -132,9 +137,6 @@ func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Reque
 
 // processFiles distributes work across workers
 func (h *ReviewHandler) processFiles(files []string) {
-	if len(files) == 0 {
-		return
-	}
 
 	workerCount := runtime.NumCPU()
 	if workerCount > len(files) {
@@ -142,9 +144,11 @@ func (h *ReviewHandler) processFiles(files []string) {
 	}
 
 	logger.Logger.Info("workerCount is", zap.Int("workerCount", workerCount))
+
 	jobs := make(chan string, len(files))
 	var wg sync.WaitGroup
 
+	// start worker goroutines
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go func(workerID int) {
@@ -156,18 +160,11 @@ func (h *ReviewHandler) processFiles(files []string) {
 		}(i + 1)
 	}
 
+	// enqueue files
 	for _, fileName := range files {
-		// check idempotency before enqueue
-		status, err := h.Redis.Get(context.Background(), fileName)
-		if err != nil || status == string(handlers.FileStateFailed) {
-			jobs <- fileName
-		} else {
-			logger.Logger.Info("skipping file (already processed or in-progress)", zap.String("file", fileName), zap.String("status", status))
-		}
-
+		jobs <- fileName
 	}
 	close(jobs)
-
 	wg.Wait()
 }
 
@@ -175,9 +172,14 @@ func (h *ReviewHandler) processFiles(files []string) {
 func (h *ReviewHandler) processFile(fileName string) {
 	ctx := context.Background()
 
-	// mark file as in-progress
-	if err := h.Redis.Set(ctx, fileName, string(handlers.FileStateInProgress), 0); err != nil {
-		logger.Logger.Error("failed to set file status to inprogress", zap.String("file", fileName), zap.Error(err))
+	// Try to acquire lock using Redis NX
+	lockAcquired, err := h.Redis.SetNX(ctx, fileName, string(handlers.FileStateInProgress), reviewFileStateTTL)
+	if err != nil {
+		logger.Logger.Error("redis error while acquiring lock", zap.String("file", fileName), zap.Error(err))
+		return
+	}
+	if !lockAcquired {
+		logger.Logger.Info("file already being processed, skipping", zap.String("file", fileName))
 		return
 	}
 
@@ -186,7 +188,7 @@ func (h *ReviewHandler) processFile(fileName string) {
 	stream, err := h.S3.GetFileStream(fileName)
 	if err != nil {
 		logger.Logger.Error("failed to get file stream", zap.String("file", fileName), zap.Error(err))
-		_ = h.Redis.Set(ctx, fileName, string(handlers.FileStateError), 0)
+		_ = h.Redis.Set(ctx, fileName, string(handlers.FileStateError), reviewFileStateTTL)
 		return
 	}
 	defer stream.Close()
@@ -195,7 +197,7 @@ func (h *ReviewHandler) processFile(fileName string) {
 	scanner := bufio.NewScanner(stream)
 	for scanner.Scan() {
 		line := scanner.Bytes()
-		var review handlers.Review
+		var review handlers.HotelReviewDTO
 
 		if err := json.Unmarshal(line, &review); err != nil {
 			logger.Logger.Warn("invalid JSON line, ignoring line", zap.ByteString("line", line), zap.Error(err))
@@ -217,44 +219,25 @@ func (h *ReviewHandler) processFile(fileName string) {
 		success = false
 	}
 
-	// update Redis state
+	// Update Redis state at the end
 	if success {
 		logger.Logger.Info("all data published successfully", zap.String("file", fileName))
-		_ = h.Redis.Set(ctx, fileName, string(handlers.FileStateSuccess), 0)
+		_ = h.Redis.Set(ctx, fileName, string(handlers.FileStateSuccess), reviewFileStateTTL)
 	} else {
 		logger.Logger.Warn("file processing failed", zap.String("file", fileName))
-		_ = h.Redis.Set(ctx, fileName, string(handlers.FileStateError), 0)
+		_ = h.Redis.Set(ctx, fileName, string(handlers.FileStateError), reviewFileStateTTL)
 	}
 }
 
-func (h *ReviewHandler) validateReview(review handlers.Review) (error, bool) {
-	if review.HotelID == 0 {
+func (h *ReviewHandler) validateReview(review handlers.HotelReviewDTO) (error, bool) {
+	if review.HotelId == 0 {
 		logger.Logger.Warn("missing HotelID", zap.Any("review", review))
 		return fmt.Errorf("hotelId is required"), false
 	}
-	if review.Comment.HotelReviewID == 0 {
+	if review.Comment.HotelReviewId == 0 {
 		logger.Logger.Warn("missing HotelReviewID", zap.Any("review", review))
 		return fmt.Errorf("missing HotelReviewID"), false
 	}
 
 	return nil, true
 }
-
-/*
-failure scnearios.
-
-1.  s3 list  failed --> api return  500  or
-2. s3 reading file failed (pipereading) -- >  exponentialbackoff ( need to read from same position) (savethe  position  inredis
-
-fileName:{ status:" ", count :int})
-3. db failed --> park to dead letter  queue.
-
-*/
-
-//idempotency key: {fileName:"done/failed/inprogress"}  // ttl  of 30 days --> 1st check
-// to resume in  case server crash: fileName + "count" : sucess / failed  , on next api call itshould resume fromsame  position
-/*
-	db wrute fail <> --> push to dead letterq
-	s3 read failed --> update   {fileName:failed}
-	inital connect  failed --> dea
-*/

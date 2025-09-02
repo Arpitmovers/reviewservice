@@ -52,3 +52,8 @@ func (r *RedisCache) Set(ctx context.Context, key string, value string, ttl time
 func (r *RedisCache) Get(ctx context.Context, key string) (string, error) {
 	return r.client.Get(ctx, key).Result()
 }
+
+// SetNX sets key only if it does not exist (atomic lock)
+func (r *RedisCache) SetNX(ctx context.Context, key string, value string, ttl time.Duration) (bool, error) {
+	return r.client.SetNX(ctx, key, value, ttl).Result()
+}
