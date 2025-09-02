@@ -5,82 +5,79 @@ import (
 	"github.com/Arpitmovers/reviewservice/internal/repository/models"
 )
 
-func mapToHotel(msg *dto.Review) models.Hotel {
-	return models.Hotel{
-		HotelID:   msg.HotelID,
-		Platform:  msg.Platform,
-		HotelName: msg.HotelName,
-	}
-}
-
-func mapToReviewer(msg *dto.Review) models.Reviewer {
-	return models.Reviewer{
-		//	ReviewerID:          msg.Comment.ReviewerInfo.ReviewerID,   // uint64
-		DisplayName:     msg.Comment.ReviewerInfo.DisplayMemberName,
-		CountryID:       msg.Comment.ReviewerInfo.CountryID,
-		CountryName:     msg.Comment.ReviewerInfo.CountryName,
-		FlagName:        msg.Comment.ReviewerInfo.FlagName,
-		ReviewGroupID:   msg.Comment.ReviewerInfo.ReviewGroupID,
-		ReviewGroupName: msg.Comment.ReviewerInfo.ReviewGroupName,
-		RoomTypeID:      msg.Comment.ReviewerInfo.RoomTypeID,
-		RoomTypeName:    msg.Comment.ReviewerInfo.RoomTypeName,
-		ReviewedCount:   msg.Comment.ReviewerInfo.ReviewerReviewedCount,
-
-		IsExpert:            msg.Comment.ReviewerInfo.IsExpertReviewer,
-		IsShowGlobalIcon:    msg.Comment.ReviewerInfo.IsShowGlobalIcon,
-		IsShowReviewedCount: msg.Comment.ReviewerInfo.IsShowReviewedCount,
-	}
-}
-
-func mapToReview(msg *dto.Review) models.Review {
-	return models.Review{
-		ReviewID:       msg.Comment.HotelReviewID,
-		HotelID:        msg.HotelID,
-		ReviewerID:     msg.Comment.HotelReviewID,
-		Rating:         msg.Comment.Rating,
-		ReviewTitle:    msg.Comment.ReviewTitle,
-		ReviewComments: msg.Comment.OriginalComment,
-	}
-}
-
-func mapToProviderScore(msg *dto.Review) models.ProviderScore {
-	if len(msg.OverallByProvider) == 0 {
-		return models.ProviderScore{}
+func MapHotelReviewDTOToModels(dto *dto.HotelReviewDTO) (*models.Hotel,
+	*models.Provider, *models.Reviewer, *models.Review, *models.ProviderSummary) {
+	hotel := &models.Hotel{
+		HotelID:   dto.HotelId,
+		HotelName: dto.HotelName,
+		Platform:  dto.Platform,
 	}
 
-	provider := msg.OverallByProvider[0]
-
-	score := models.ProviderScore{
-		HotelID:      msg.HotelID,
-		ProviderID:   provider.ProviderID,
-		OverallScore: provider.OverallScore,
-		ReviewCount:  provider.ReviewCount,
+	// Assuming one provider per record from comment
+	provider := &models.Provider{
+		ProviderID:   dto.Comment.ProviderId,
+		ProviderName: "",
 	}
 
-	cleanliness, exists := provider.Grades["Cleanliness"]
-	if exists {
-		score.Cleanliness = cleanliness
+	// Map reviewer info
+	reviewerDTO := dto.Comment.ReviewerInfo
+	reviewer := &models.Reviewer{
+		DisplayName:           reviewerDTO.DisplayMemberName,
+		CountryID:             reviewerDTO.CountryId,
+		CountryName:           reviewerDTO.CountryName,
+		ReviewGroupID:         reviewerDTO.ReviewGroupId,
+		ReviewGroupName:       reviewerDTO.ReviewGroupName,
+		ReviewerReviewedCount: reviewerDTO.ReviewerReviewedCount,
+		IsExpertReviewer:      reviewerDTO.IsExpertReviewer,
 	}
 
-	faceilities, facExists := provider.Grades["Facilities"]
-	if facExists {
-		score.Facilities = faceilities
+	review := &models.Review{
+		ReviewID:                dto.Comment.HotelReviewId,
+		HotelID:                 dto.HotelId,
+		ProviderID:              dto.Comment.ProviderId,
+		Rating:                  dto.Comment.Rating,
+		CheckInMonthYear:        dto.Comment.CheckInDateMonthYear,
+		EncryptedReviewData:     dto.Comment.EncryptedReviewData,
+		FormattedRating:         dto.Comment.FormattedRating,
+		FormattedReviewDate:     dto.Comment.FormattedReviewDate,
+		RatingText:              dto.Comment.RatingText,
+		ResponderName:           dto.Comment.ResponderName,
+		ResponseDateText:        dto.Comment.ResponseDateText,
+		ResponseText:            "", // This can be set if response content exists
+		ResponseTranslateSource: dto.Comment.ResponseTranslateSource,
+		ReviewComments:          dto.Comment.ReviewComments,
+		ReviewNegatives:         dto.Comment.ReviewNegatives,
+		ReviewPositives:         dto.Comment.ReviewPositives,
+		ReviewProviderLogo:      dto.Comment.ReviewProviderLogo,
+		ReviewProviderText:      dto.Comment.ReviewProviderText,
+		ReviewTitle:             dto.Comment.ReviewTitle,
+		TranslateSource:         dto.Comment.TranslateSource,
+		TranslateTarget:         dto.Comment.TranslateTarget,
+		ReviewDate:              dto.Comment.ReviewDate,
+		OriginalTitle:           dto.Comment.OriginalTitle,
+		OriginalComment:         dto.Comment.OriginalComment,
+		FormattedResponseDate:   dto.Comment.FormattedResponseDate,
+		RoomType:                reviewerDTO.RoomTypeName,
+		LengthOfStay:            reviewerDTO.LengthOfStay,
 	}
 
-	location, locExists := provider.Grades["Location"]
-	if locExists {
-		score.Location = location
+	// Map provider summary using first overall provider for simplicity
+	var providerSummary *models.ProviderSummary
+	if len(dto.OverallByProviders) > 0 {
+		p := dto.OverallByProviders[0]
+		providerSummary = &models.ProviderSummary{
+			HotelID:       dto.HotelId,
+			ProviderID:    p.ProviderId,
+			OverallScore:  p.OverallScore,
+			ReviewCount:   p.ReviewCount,
+			Cleanliness:   p.Grades["Cleanliness"],
+			Facilities:    p.Grades["Facilities"],
+			Location:      p.Grades["Location"],
+			Service:       p.Grades["Service"],
+			ValueForMoney: p.Grades["Value for money"],
+			RoomComfort:   p.Grades["Room comfort and quality"],
+		}
 	}
 
-	service, servieExists := provider.Grades["Service"]
-	if servieExists {
-		score.Service = service
-	}
-
-	vam, valueMoneyExists := provider.Grades["Value for money"]
-	if valueMoneyExists {
-		score.ValueForMoney = vam
-	}
-
-	return score
+	return hotel, provider, reviewer, review, providerSummary
 }

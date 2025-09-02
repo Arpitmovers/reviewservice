@@ -1,23 +1,16 @@
 package models
 
 type Reviewer struct {
-	ReviewerID          uint64 `gorm:"primaryKey;"`
-	DisplayName         string `gorm:"size:100"`
-	CountryID           int    `gorm:"index"`
-	CountryName         string `gorm:"size:100"`
-	FlagName            string `gorm:"size:10"`
-	ReviewGroupID       int
-	ReviewGroupName     string `gorm:"size:50"`
-	RoomTypeID          int
-	RoomTypeName        string `gorm:"size:100"`
-	ReviewedCount       int
-	IsExpert            bool
-	IsShowGlobalIcon    bool
-	IsShowReviewedCount bool
-
-	// Reviews []Review `gorm:"foreignKey:ReviewerID"`
+	ReviewerID            int    `gorm:"primaryKey;autoIncrement;column:reviewer_id"`
+	DisplayName           string `gorm:"size:100"`
+	CountryID             int
+	CountryName           string `gorm:"size:100"`
+	ReviewGroupID         int
+	ReviewGroupName       string `gorm:"size:100"`
+	ReviewerReviewedCount int
+	IsExpertReviewer      bool
 }
 
 func (Reviewer) TableName() string {
-	return "reviewers"
+	return "Reviewers"
 }

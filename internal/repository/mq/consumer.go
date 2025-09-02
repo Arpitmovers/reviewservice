@@ -2,12 +2,18 @@ package mq
 
 import (
 	"fmt"
+	"log"
 
 	logger "github.com/Arpitmovers/reviewservice/internal/logging"
 
 	"github.com/rabbitmq/amqp091-go"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.uber.org/zap"
+)
+
+const (
+	prefetchCount = 2
+	preFetchSize  = 0
 )
 
 type Consumer struct {
@@ -67,6 +73,10 @@ func (c *Consumer) Consume(handler func(amqp.Delivery) error) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start consuming: %w", err)
+	}
+	// set prefetch (must be done on same channel)
+	if err := c.ch.Qos(prefetchCount, preFetchSize, false); err != nil {
+		log.Fatalf("failed to set QoS: %v", err)
 	}
 
 	// consume messages

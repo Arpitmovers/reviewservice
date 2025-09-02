@@ -13,33 +13,41 @@ func NewReviewRepository(db *gorm.DB) *ReviewRepository {
 	return &ReviewRepository{Db: db}
 }
 
-func UpsertHotel(tx *gorm.DB, hotel Hotel) error {
-	return tx.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "hotel_id"}, {Name: "platform"}},
-		DoUpdates: clause.AssignmentColumns([]string{"hotel_name"}),
-	}).Create(&hotel).Error
+type HotelReviewRepository interface {
+	InsertHotel(hotel *Hotel) error
+	InsertProvider(provider *Provider) error
+	InsertReviewer(reviewer *Reviewer) (int, error)
+	InsertReview(review *Review) error
+	UpsertProviderSummary(summary *ProviderSummary) error
 }
 
-func UpsertReviewer(tx *gorm.DB, reviewer Reviewer) error {
-	return tx.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "reviewer_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"display_name", "country_id"}),
-	}).Create(&reviewer).Error
+func (r *ReviewRepository) InsertHotel(hotel *Hotel) error {
+	return r.Db.FirstOrCreate(hotel, Hotel{HotelID: hotel.HotelID}).Error
 }
 
-func UpsertReview(tx *gorm.DB, review Review) error {
-	return tx.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "review_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{"rating", "review_title", "review_comments"}),
-	}).Create(&review).Error
+func (r *ReviewRepository) InsertProvider(provider *Provider) error {
+	return r.Db.FirstOrCreate(provider, Provider{ProviderID: provider.ProviderID}).Error
 }
 
-func UpsertProviderScore(tx *gorm.DB, ps ProviderScore) error {
-	return tx.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "hotel_id"}, {Name: "provider_id"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"overall_score", "review_count", "cleanliness",
-			"facilities", "location", "service", "value_for_money",
-		}),
-	}).Create(&ps).Error
+// return revierId,error
+func (r *ReviewRepository) InsertReviewer(reviewer *Reviewer) (int, error) {
+	err := r.Db.Create(reviewer).Error
+	return reviewer.ReviewerID, err
+}
+
+// insert only if <reviewer_id + review_date > doenst exist
+func (r *ReviewRepository) InsertReview(review *Review) error {
+
+	return r.Db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "reviewer_id"}, {Name: "review_date"}},
+		DoNothing: true, // skip insert if exists
+	}).Create(review).Error
+}
+
+func (r *ReviewRepository) UpsertProviderSummary(summary *ProviderSummary) error {
+	return r.Db.Clauses(
+		clause.OnConflict{
+			UpdateAll: true, // update all fields on conflict
+		},
+	).Create(summary).Error
 }
