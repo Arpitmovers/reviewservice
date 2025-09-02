@@ -2,43 +2,51 @@ package redis
 
 import (
 	"context"
-	"fmt"
 	"sync"
+	"time"
 
+	logger "github.com/Arpitmovers/reviewservice/internal/logging"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 var (
 	once          sync.Once
 	redisInstance *RedisCache
+	redisInitErr  error
 )
 
 type RedisCache struct {
 	client *redis.Client
 }
 
-func GetRedisClient() *RedisCache {
+func GetRedisClient() (*RedisCache, error) {
 
 	once.Do(func() {
 		rdb := redis.NewClient(&redis.Options{
 			Addr:     "127.0.0.1:6379",
-			Password: "",
+			Password: "", // set if needed
 			DB:       0,
 		})
 
-		if err := rdb.Ping(context.Background()).Err(); err != nil {
-			panic(fmt.Sprintf("failed to connect to redis: %v", err))
+		if pingErr := rdb.Ping(context.Background()).Err(); pingErr != nil {
+			logger.Logger.Error("error connecting to redis", zap.Error(pingErr))
+			redisInitErr = pingErr
+			return
 		}
-		fmt.Println("connected to redis ")
-		redisInstance = &RedisCache{client: rdb}
 
+		logger.Logger.Info("connected to redis")
+		redisInstance = &RedisCache{client: rdb}
 	})
 
-	return redisInstance
+	if redisInitErr != nil {
+		return nil, redisInitErr
+	}
+	return redisInstance, nil
 }
 
-func (r *RedisCache) Set(ctx context.Context, key string, value string) error {
-	return r.client.Set(ctx, key, value, 0).Err()
+func (r *RedisCache) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
+	return r.client.Set(ctx, key, value, ttl).Err()
 }
 
 func (r *RedisCache) Get(ctx context.Context, key string) (string, error) {

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -129,12 +130,13 @@ func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Reque
 	h.processFiles(files)
 }
 
+// processFiles distributes work across workers
 func (h *ReviewHandler) processFiles(files []string) {
 	if len(files) == 0 {
 		return
 	}
-	workerCount := runtime.NumCPU()
 
+	workerCount := runtime.NumCPU()
 	if workerCount > len(files) {
 		workerCount = len(files)
 	}
@@ -155,23 +157,41 @@ func (h *ReviewHandler) processFiles(files []string) {
 	}
 
 	for _, fileName := range files {
-		jobs <- fileName
+		// check idempotency before enqueue
+		status, err := h.Redis.Get(context.Background(), fileName)
+		if err != nil || status == string(handlers.FileStateFailed) {
+			jobs <- fileName
+		} else {
+			logger.Logger.Info("skipping file (already processed or in-progress)", zap.String("file", fileName), zap.String("status", status))
+		}
+
 	}
 	close(jobs)
 
 	wg.Wait()
 }
 
+// processFile reads file, publishes reviews, and updates Redis state
 func (h *ReviewHandler) processFile(fileName string) {
+	ctx := context.Background()
+
+	// mark file as in-progress
+	if err := h.Redis.Set(ctx, fileName, string(handlers.FileStateInProgress), 0); err != nil {
+		logger.Logger.Error("failed to set file status to inprogress", zap.String("file", fileName), zap.Error(err))
+		return
+	}
+
 	logger.Logger.Info("processing file", zap.String("file", fileName))
 
 	stream, err := h.S3.GetFileStream(fileName)
 	if err != nil {
 		logger.Logger.Error("failed to get file stream", zap.String("file", fileName), zap.Error(err))
+		_ = h.Redis.Set(ctx, fileName, string(handlers.FileStateError), 0)
 		return
 	}
 	defer stream.Close()
 
+	success := true
 	scanner := bufio.NewScanner(stream)
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -183,9 +203,9 @@ func (h *ReviewHandler) processFile(fileName string) {
 		}
 
 		if _, ok := h.validateReview(review); ok {
-
 			if err := h.Publisher.PublishSafe("review.created", line); err != nil {
 				logger.Logger.Error("failed to publish message", zap.Error(err), zap.String("file", fileName))
+				success = false
 			} else {
 				logger.Logger.Debug("message published successfully", zap.String("file", fileName))
 			}
@@ -194,8 +214,16 @@ func (h *ReviewHandler) processFile(fileName string) {
 
 	if err := scanner.Err(); err != nil {
 		logger.Logger.Error("error reading file", zap.String("file", fileName), zap.Error(err))
+		success = false
+	}
+
+	// update Redis state
+	if success {
+		logger.Logger.Info("all data published successfully", zap.String("file", fileName))
+		_ = h.Redis.Set(ctx, fileName, string(handlers.FileStateSuccess), 0)
 	} else {
-		logger.Logger.Info("all data published", zap.String("file", fileName))
+		logger.Logger.Warn("file processing failed", zap.String("file", fileName))
+		_ = h.Redis.Set(ctx, fileName, string(handlers.FileStateError), 0)
 	}
 }
 
@@ -215,7 +243,7 @@ func (h *ReviewHandler) validateReview(review handlers.Review) (error, bool) {
 /*
 failure scnearios.
 
-1.  s3 list  failed --> api return  500  or ->exponentional backoff
+1.  s3 list  failed --> api return  500  or
 2. s3 reading file failed (pipereading) -- >  exponentialbackoff ( need to read from same position) (savethe  position  inredis
 
 fileName:{ status:" ", count :int})

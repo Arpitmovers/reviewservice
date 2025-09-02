@@ -2,9 +2,12 @@ package mq
 
 import (
 	"fmt"
-	"log"
+
+	logger "github.com/Arpitmovers/reviewservice/internal/logging"
 
 	"github.com/rabbitmq/amqp091-go"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"go.uber.org/zap"
 )
 
 type Consumer struct {
@@ -51,31 +54,33 @@ func NewConsumer(conn *AmqpConnection, queue, exchange, key string) (*Consumer, 
 	}, nil
 }
 
-// Consume starts consuming messages and invokes handler per message.
-func (c *Consumer) Consume(handler func([]byte) error) error {
+func (c *Consumer) Consume(handler func(amqp.Delivery) error) error {
+
 	msgs, err := c.ch.Consume(
 		c.queue,
 		"",    // consumer tag
-		true,  // auto-ack
+		false, // auto-ack
 		false, // exclusive
 		false, // no-local
 		false, // no-wait
 		nil,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to start consuming: %w", err)
 	}
 
+	// consume messages
 	go func() {
 		for msg := range msgs {
-			fmt.Println("got msg in consume")
-			if err := handler(msg.Body); err != nil {
-				log.Printf("[mq] handler error: %v", err)
+			logger.Logger.Info("got msg in consume")
+			if err := handler(msg); err != nil {
+				logger.Logger.Error(" handler error", zap.Error(err))
+
 			}
 
 		}
 	}()
 
-	log.Printf("[mq] consumer started for queue %s", c.queue)
+	logger.Logger.Info("[mq] consumer started for queue %s", zap.String("queue", c.queue))
 	return nil
 }

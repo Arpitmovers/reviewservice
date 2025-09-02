@@ -44,8 +44,12 @@ func (a *App) Initialize(cfg *config.Config) {
 	a.amqpConnect = a.setupAmqp(cfg)
 	a.amqpPubliser = handlers.GetPublisher(a.amqpConnect)
 	a.amqpConsumer = handlers.GetSubscriber(a.amqpConnect)
+	var redisError error
+	a.redisClient, redisError = redis.GetRedisClient()
 
-	a.redisClient = redis.GetRedisClient()
+	if redisError != nil {
+		logger.Logger.Error("error in GetRedisClient ", zap.Error(err))
+	}
 
 	var dbErr error
 	a.dbConnect, dbErr = db.NewDBConnect(cfg)
@@ -61,7 +65,7 @@ func (a *App) Initialize(cfg *config.Config) {
 	reviewService := services.NewReviewService(reviewRepo)
 	reviewConsumer := handlers.NewReviewConsumer(reviewService)
 
-	rmqError := a.amqpConsumer.Consume(reviewConsumer.ConsumeReview())
+	rmqError := a.amqpConsumer.Consume(reviewConsumer.ConsumeReview)
 	if rmqError != nil {
 		logger.Logger.Error("failed to start consumer", zap.Error(rmqError))
 	}
