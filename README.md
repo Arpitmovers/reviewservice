@@ -30,8 +30,8 @@ Install the following for running the setup in your local system:
   
  ```bash
 
-AWS_ACCESS_KEY_ID=<your_aws_access_key_id>
-AWS_SECRET_ACCESS_KEY=<your_aws_secret_access_key>
+AWS_ACCESS_KEY_ID=<ws_access_key_id>
+AWS_SECRET_ACCESS_KEY=<aws_secret_access_key>
 AWS_REGION=ap-south-1
 REVIEW_BUCKET=hotelservice
 
@@ -56,7 +56,7 @@ API_USER=<your_api_user>
 API_PWD=<your_api_password>
 
  ```
- 
+
 - Database and  tables creation in mariadb
 
   ```bash
@@ -87,42 +87,37 @@ API_PWD=<your_api_password>
 
 ## Design Decisions:
  - Tech Stack: Golang1.22, RabbitMQ 4.1.3, Redis, MariaDB 15.1
--  Asynchronous Processing: The API responds immediately after validating the request and discovering files in S3/
+-  Asynchronous Processing: The API responds immediately after validating the request and discovering files in S3
 -  Actual file ingestion and publishing of each json record  happens in the background , the consumer is responsible for persisiting it to Datastore.
 -  Worker Pool : to allow processing of multiple files concurrently , we are using  n go routines where n=min (no of cpus, no of files in s3)
--  Idempotency handling: using redis for locking using SETNX , so processing of same file is not triggered multiple times.
+-  Idempotency handling at file level: using redis for locking using SETNX , so processing of same file is not triggered multiple times.
 -  Streaming s3 file reads : to avoid loading file in memory.
--  Invalid json objects ( not having hotelreviewId) are skipped and are not sent to rabbit mq.
-- In case no files are present in the s3 path , api will respond with message :"No files found in s3 path"
+-  Invalid json objects ( not having hotelReviewId) are skipped and are not sent to rabbit mq.
 - Each file will be processed only if it has failed previosuly or it has not been processed before.
 - Incase of  failure from Broker / Exchange in publishing msg , the sender will be retying using exponential backoff strategy at max 5 times. 
--  The consumer will send ACK once the record is successfully saved in DB - post this the broker will remove the record .
+-  The consumer will send ACK once the record is successfully saved in DB - post this the broker will remove the record 
 -  We are using Manual ACK approach from consumer , to confirm that the record is processed, in case of consumer is down , the message will be
 redelivered from broker , and ensures atleast once semantic.
-- We are only allowing 5 records to be consumed by a consumer at a time , post the ack from consumer , further records will be sent by AMQP broker.
+- We are only allowing 5 records (prefetchCount parmater)  to be consumed by a consumer at a time , post the ack from consumer , further records will be sent by AMQP broker.This prevents overburdening of consumer
 - The enties defined are Hotel , Reviews, Providers, Reviewers,ProviderSummary
 - There is 1:many relation defined between Hotel to Reviews, Provider to Reviews, Reviewer to Reviews, Hotel. 
 - Hotel , Provider have a composite relation  to ProviderSummary
 - All db operations run in a single transaction (per record) , this gaurantees atomocity .
-- In order for data integrity and consistency, model relation : have defined foreign keys
+- In order for data integrity and consistency, model relation : have defined foreign keys at schema.
 
 
 
-
-##
 ## Flow:
 - The api checks if files are present in the s3 bucket path , and we launch n  go routines where n is  minm(no of cpus, no of files in s3)
-- The api will return HTTP 201 in case all validations passed and processing is
+- The api will return HTTP 201 in case all validations passed and processing is started
 - Each go routine reads and parses the records in .jl file , and does validation of json object 
 - If the records is Valid it is published to "reviews"  AMQP exchange. The exchange declared is of direct type.
 - In case of errors in publishing to AMQP exchange , there is exponential backoff strategy implemented.
-- 
-
-
-- Consumer side:
-   In case DB operation fails (db timeout/ db crash)- the mesage will be retried from broker as we are using Nack(false, true)
-   In case of bad message , we are informing broker to discard the message = Nack(false, false)
-   In case of succesful  db insert , we are sending ACK to broker , the broker will discard the msg ,and will not resend the message
+  
+## Consumer side:
+- In case DB operation fails (db timeout/ db crash)- the mesage will be retried from broker as we are using Nack(false, true)
+- In case of bad message , we are informing broker to discard the message = Nack(false, false)
+- In case of succesful  db insert , we are sending ACK to broker , the broker will discard the msg ,and will not resend the message
 
    
 
