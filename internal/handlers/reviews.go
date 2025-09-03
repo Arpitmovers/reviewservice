@@ -126,7 +126,7 @@ func (h *ReviewHandler) TriggerReviewInjest(w http.ResponseWriter, r *http.Reque
 
 	logger.Logger.Info("files found for processing", zap.Int("count", totalFiles))
 
-	writeJSON(w, http.StatusOK, handlers.APIResponse{
+	writeJSON(w, http.StatusAccepted, handlers.APIResponse{
 		ErrorMsg: "",
 		Success:  true,
 	})

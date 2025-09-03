@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	prefetchCount = 2
-	preFetchSize  = 0
+	prefetchCount = 5
+	preFetchSize  = 0 // not using size based flow control
 )
 
 type Consumer struct {

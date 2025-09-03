@@ -30,6 +30,7 @@ type Config struct {
 	ApiUser      string
 	ApiPwd       string
 	ReviewBucket string
+	AmqpHost     string
 }
 
 func Load() *Config {
@@ -59,7 +60,9 @@ func Load() *Config {
 		ApiUser:      getEnv("API_USER", " "),
 		ApiPwd:       getEnv("API_PWD", " "),
 		ReviewBucket: getEnv("REVIEW_BUCKET", ""),
+		AmqpHost:     getEnv("AMQP_HOST", "127.0.0.1"),
 	}
+
 	return cfg
 
 }

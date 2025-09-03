@@ -73,8 +73,8 @@ func (a *App) Initialize(cfg *config.Config) {
 
 func (a *App) setupAmqp(cfg *config.Config) *mq.AmqpConnection {
 	amqpURL := fmt.Sprintf(
-		"amqp://%s:%s@localhost:%s/%s",
-		cfg.AmqpUserName, cfg.AmqpPwd, cfg.AmqpPort, cfg.AmqpVhost)
+		"amqp://%s:%s@%s:%s/%s",
+		cfg.AmqpUserName, cfg.AmqpPwd, cfg.AmqpHost, cfg.AmqpPort, cfg.AmqpVhost)
 
 	conn, err := mq.NewConnection(amqpURL)
 	if err != nil {

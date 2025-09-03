@@ -1,3 +1,6 @@
+
+CREATE DATABASE zuzu_db;
+
 CREATE TABLE zuzu_db.Hotels (
     hotel_id BIGINT UNSIGNED  PRIMARY KEY,
     hotel_name VARCHAR(500) NOT NULL,
