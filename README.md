@@ -10,14 +10,14 @@ Install the following for running the setup in your local system:
 
 - [MariaDB in local](https://mariadb.com/docs/server/server-installation/mariadb-package-repositories/)  
   
--  Add virtual host (review_dev) to rabbitMQ: s
+-  Add virtual host (review_dev) to rabbitMQ: 
    ```bash
    sudo rabbitmqctl add_vhost review_dev
     ```
   
 -  Create RabbitMq service user and password  :
     ```bash
-    sudo rabbitmqctl add_user reviewService 1asd21    (username , pwd)
+    sudo rabbitmqctl add_user reviewService <PWD>    (username , pwd)
     ```
 
 
@@ -97,7 +97,7 @@ redelivered from broker , and ensures atleast once semantic.
 
    
 
-![Sender side flow](.git/sender.png)
+![Sender side flow](docs/sender.png)
 
 
 - DB Schema with relatiionships 
