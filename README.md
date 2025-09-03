@@ -101,7 +101,7 @@ redelivered from broker , and ensures atleast once semantic.
 
 
 - DB Schema with relatiionships 
-![R Diagram](er-diagram.png "Title")
+![ER Diagram](docs/er-diagram.png "Title")
 _________________________
 Assumptions:
 
