@@ -26,36 +26,7 @@ Install the following for running the setup in your local system:
     sudo rabbitmqctl set_permissions -p review_dev  reviewService  ".*" ".*" ".*"
     ```
 
-- To run in local , create an .env file with the following variables,pls change the  mariabdb ,amqp  , redis port , credentials as per your setup
-  
-  ```bash
-      AWS_ACCESS_KEY_ID=AKIAZUGVWI5XXFIQG5XU
-      AWS_SECRET_ACCESS_KEY=eyL6XFsnowbuD15iWHgRNb7fXy03bJ1iUb/pRkom
-      AWS_REGION=ap-south-1
-      REVIEW_BUCKET=hotelservice
-
-
-      AMQP_VHOST=review_dev
-      AMQP_PORT=5672
-      AMQP_USERNAME=reviewService
-      AMQP_PWD=1asd21
-      AMQP_HOST=localhost
-
-      REDIS_PORT=6379
-      REDIS_HOST=127.0.0.1
-
-      MARIA_HOST=localhost
-      MARIA_PORT=3306
-      REVIEW_USER =root
-      REVIEW_DB=zuzu_db
-      REVIEW_DBPWD=pass
-      REVIEW_TABLE=root
-
-      JWT_KEY="fdgd64"
-      API_USER="admin"
-      API_PWD="3#%sdf"
-    ```
-
+- To run in local , create an .env file (will share over email) with the following variables,pls change the  mariabdb ,amqp  , redis port , credentials as per your setup
 
 - Database and  tables creation in mariadb
 
