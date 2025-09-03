@@ -27,11 +27,40 @@ Install the following for running the setup in your local system:
     ```
 
 - To run in local , create an .env file (will share over email) with the following variables,pls change the  mariabdb ,amqp  , redis port , credentials as per your setup
+  
+ ```bash
 
+AWS_ACCESS_KEY_ID=<your_aws_access_key_id>
+AWS_SECRET_ACCESS_KEY=<your_aws_secret_access_key>
+AWS_REGION=ap-south-1
+REVIEW_BUCKET=hotelservice
+
+AMQP_VHOST=review_dev
+AMQP_PORT=5672
+AMQP_USERNAME=<your_amqp_username>
+AMQP_PWD=<your_amqp_password>
+AMQP_HOST=localhost
+
+REDIS_PORT=6379
+REDIS_HOST=127.0.0.1
+
+MARIA_HOST=localhost
+MARIA_PORT=3306
+REVIEW_USER=<your_db_user>
+REVIEW_DB=zuzu_db
+REVIEW_DBPWD=<your_db_password>
+REVIEW_TABLE=root
+
+JWT_KEY=<your_jwt_key>
+API_USER=<your_api_user>
+API_PWD=<your_api_password>
+
+ ```
+ 
 - Database and  tables creation in mariadb
 
   ```bash
-            run the file /reviewService/deploy/db/tablecreation.sql
+     run the commands in file /reviewService/deploy/db/tablecreation.sql 
     ```
 
 
